@@ -38,7 +38,7 @@ fn compute_sum_of_calibration_values(content: &str, replace: bool) -> u32 {
             l.to_owned()
         };
         for c in lc.chars() {
-            if let Some(_) = c.to_digit(10) {
+            if c.is_numeric() {
                 first = Some(c);
                 last = Some(c);
                 break; // once we found the first one, we're done
@@ -51,7 +51,7 @@ fn compute_sum_of_calibration_values(content: &str, replace: bool) -> u32 {
             l.to_owned()
         };
         for c in lc.chars() {
-            if let Some(_) = c.to_digit(10) {
+            if c.is_numeric() {
                 last = Some(c);
             }
         }
