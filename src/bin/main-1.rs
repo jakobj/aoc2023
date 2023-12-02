@@ -1,6 +1,6 @@
 use std::fs;
 
-static DIGITS: &'static [(&str, &str)] = &[
+static DIGITS: &[(&str, &str)] = &[
     ("one", "1"),
     ("two", "2"),
     ("three", "3"),

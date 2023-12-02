@@ -9,7 +9,7 @@ fn main() {
         .lines()
         .map(|l| {
             l.parse::<Game>()
-                .expect(&format!("Could not convert line \"{l}\" to `Game`"))
+                .unwrap_or_else(|_| panic!("Could not convert line \"{l}\" to `Game`"))
         })
         .collect::<Vec<Game>>();
 
@@ -55,7 +55,7 @@ impl FromStr for Game {
                 for count_record in round_record.split(", ") {
                     let count_record = count_record
                         .split(' ')
-                        .skip_while(|&x| x.len() == 0)
+                        .skip_while(|&x| x.is_empty())
                         .collect::<Vec<&str>>();
                     assert!(count_record.len() == 2);
                     let count = count_record[0].parse::<usize>()?;
