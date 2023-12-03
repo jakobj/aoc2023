@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, num::ParseIntError, str::FromStr};
 
 fn main() {
-    let filename = "inputs/2a.txt";
+    let filename = "inputs/2.txt";
     let content =
         fs::read_to_string(filename).expect("Should have been able to read the input file");
 
@@ -28,8 +28,20 @@ fn main() {
             g.id
         })
         .sum::<usize>();
-
     println!("The sum of the IDs of possible games is {sum_of_ids}.");
+
+    let sum_of_powers = games.iter().map(
+        |g| {
+            let mut min_count = HashMap::from([(Color::Red, 0), (Color::Green, 0), (Color::Blue, 0)]);
+            for r in g.rounds.iter() {
+                for (color, count) in r.counts.iter() {
+                    min_count.insert(*color, std::cmp::max(min_count[color], *count));
+                }
+            }
+            min_count.values().product::<usize>()
+        }
+    ).sum::<usize>();
+    println!("The sum of the power of these sets is {sum_of_powers}.");
 }
 
 #[derive(Debug)]
@@ -96,7 +108,7 @@ impl Round {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Color {
     Red,
     Green,
