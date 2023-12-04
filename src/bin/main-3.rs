@@ -7,25 +7,41 @@ fn main() {
 
     let data = content
         .lines()
-        .map(|l| {
-            l.chars()
-                .map(|c| Element::from(c))
-                .collect::<Vec<Element>>()
-        })
+        .map(|l| l.chars().map(Element::from).collect::<Vec<Element>>())
         .collect::<Vec<Vec<Element>>>();
     let numbers = extract_numbers(data);
     let sum = numbers
         .iter()
-        .filter(|n| n.neighbors.iter().any(|e| *e == Element::Symbol))
+        .filter(|n| {
+            n.neighbors
+                .iter()
+                .any(|e| *e == Element::Symbol || *e == Element::Gear)
+        })
         .map(|n| n.value)
         .sum::<usize>();
-    println!("The sum of all of the part numbers in the engine schematic is {sum}.")
+    println!("The sum of all of the part numbers in the engine schematic is {sum}.");
+
+    let mut prod = 0;
+    'outer: for (i, ni) in numbers.iter().enumerate() {
+        for nj in numbers.iter().skip(i + 1) {
+            for gi in ni.gears.iter() {
+                for gj in nj.gears.iter() {
+                    if gi.position == gj.position {
+                        prod += ni.value * nj.value;
+                        continue 'outer;
+                    }
+                }
+            }
+        }
+    }
+    println!("The sum of all of the gear ratios in your engine schematic is {prod}.");
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Element {
     Digit(usize),
     Period,
+    Gear,
     Symbol,
 }
 
@@ -35,6 +51,8 @@ impl From<char> for Element {
             Element::Digit(v as usize)
         } else if value == '.' {
             Element::Period
+        } else if value == '*' {
+            Element::Gear
         } else {
             Element::Symbol
         }
@@ -45,6 +63,7 @@ fn extract_numbers(data: Vec<Vec<Element>>) -> Vec<Number> {
     let mut numbers = Vec::new();
     let mut stack = Vec::new();
     let mut neighbors = Vec::new();
+    let mut gears = Vec::new();
     for i in 0..data.len() {
         for j in 0..data[0].len() {
             match data[i][j] {
@@ -56,12 +75,18 @@ fn extract_numbers(data: Vec<Vec<Element>>) -> Vec<Number> {
                             let l = j as i32 + dj;
                             if k >= 0 && k < data.len() as i32 && l >= 0 && l < data[0].len() as i32
                             {
-                                neighbors.push(data[k as usize][l as usize]);
+                                let k = k as usize;
+                                let l = l as usize;
+                                let n = data[k][l];
+                                neighbors.push(n);
+                                if n == Element::Gear {
+                                    gears.push(Gear { position: (k, l) });
+                                }
                             }
                         }
                     }
                 }
-                Element::Period | Element::Symbol => {
+                Element::Period | Element::Symbol | Element::Gear => {
                     if stack.is_empty() {
                         continue;
                     }
@@ -74,9 +99,11 @@ fn extract_numbers(data: Vec<Vec<Element>>) -> Vec<Number> {
                     numbers.push(Number {
                         value,
                         neighbors: neighbors.clone(),
+                        gears: gears.clone(),
                     });
                     stack.clear();
                     neighbors.clear();
+                    gears.clear();
                 }
             }
         }
@@ -88,4 +115,10 @@ fn extract_numbers(data: Vec<Vec<Element>>) -> Vec<Number> {
 struct Number {
     value: usize,
     neighbors: Vec<Element>,
+    gears: Vec<Gear>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Gear {
+    position: (usize, usize),
 }
