@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, fs, str::FromStr};
 
 fn main() {
-    let filename = "inputs/7a.txt";
+    let filename = "inputs/7.txt";
     let content =
         fs::read_to_string(filename).expect("Should have been able to read the input file");
 
@@ -9,12 +9,12 @@ fn main() {
         .lines()
         .map(|l| {
             let l_split = l.split(' ').collect::<Vec<&str>>();
-            let hand = l_split[0]
-                .parse::<Hand>()
-                .unwrap_or_else(|_| panic!("Could not convert line \"{l}\" to `Game`"));
-            let bid = l_split[1]
-                .parse::<usize>()
-                .unwrap_or_else(|_| panic!("Could not convert line \"{l}\" to `Game`"));
+            let hand = l_split[0].parse::<Hand>().unwrap_or_else(|_| {
+                panic!("Could not convert first part of line \"{l}\" to `Hand`")
+            });
+            let bid = l_split[1].parse::<usize>().unwrap_or_else(|_| {
+                panic!("Could not convert second part of line \"{l}\" to `usize`")
+            });
             (hand, bid)
         })
         .collect::<Vec<(Hand, usize)>>();
@@ -23,7 +23,7 @@ fn main() {
     let winnings = hands_bids
         .iter()
         .enumerate()
-        .map(|(i, (_, w))| (i + 1) * w)
+        .map(|(i, (_, b))| (i + 1) * b)
         .sum::<usize>();
     println!("The total winnings are {winnings}.");
 }
@@ -76,6 +76,7 @@ impl PartialOrd for Hand {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Card {
+    Jack, // part two
     Two,
     Three,
     Four,
@@ -85,7 +86,7 @@ enum Card {
     Eight,
     Nine,
     Ten,
-    Jack,
+    // Jack,  // part one
     Queen,
     King,
     Ace,
@@ -126,9 +127,39 @@ enum HandType {
 }
 
 impl From<&Vec<Card>> for HandType {
-    fn from(value: &Vec<Card>) -> Self {
+    fn from(cards: &Vec<Card>) -> Self {
+        fn best_cards_without_jack(cards: &[Card]) -> Vec<Card> {
+            // replace all Jacks and choose the hand type with the highest rating
+            let mut choices = Vec::new();
+            let mut stack = Vec::new();
+            stack.push(cards.to_vec());
+            'outer: while let Some(v) = stack.pop() {
+                for (i, c) in v.iter().enumerate() {
+                    if *c == Card::Jack {
+                        // try if duplicating existing cards helps
+                        for r in v.iter().filter(|&&c| c != Card::Jack) {
+                            let mut tmp = v.to_vec();
+                            tmp[i] = *r;
+                            stack.push(tmp);
+                        }
+                        // try if adding an ace helps
+                        let mut tmp = v.to_vec();
+                        tmp[i] = Card::Ace;
+                        stack.push(tmp);
+                        continue 'outer;
+                    }
+                }
+                assert!(!v.iter().any(|&c| c == Card::Jack));
+                choices.push(Hand { cards: v.to_vec() });
+            }
+            choices.sort_unstable();
+            choices.last().unwrap().cards.clone()
+        }
+
+        let cards = best_cards_without_jack(cards); // for part two
+
         let mut counter: HashMap<Card, usize> = HashMap::new();
-        for c in value.iter() {
+        for c in cards.iter() {
             *counter.entry(*c).or_default() += 1;
         }
         let mut counter = counter.values().copied().collect::<Vec<usize>>();
