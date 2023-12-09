@@ -8,30 +8,36 @@ fn main() {
     let worth = content
         .lines()
         .map(|l| {
-            let v = l.split(':').collect::<Vec<&str>>();
-            let v = v[1].split('|').collect::<Vec<&str>>();
-            let winnings_numbers = v[0].parse::<Numbers>().unwrap();
-            let numbers = v[1].parse::<Numbers>().unwrap();
-
-            let count = numbers
-                .numbers
-                .iter()
-                .filter(|&&n| winnings_numbers.numbers.iter().any(|&wn| wn == n))
-                .map(|_| 1)
-                .sum::<u32>();
-
-            if count == 0 {
+            let (winning_numbers, numbers) = parse_line(l);
+            let matches = count_matches(winning_numbers, numbers);
+            if matches == 0 {
                 0
             } else {
-                2_usize.pow(count - 1)
+                2_usize.pow(matches as u32 - 1)
             }
         })
         .sum::<usize>();
 
-    println!("The colorful cards are {worth} worth in total.")
+    println!("The colorful cards are {worth} worth in total.");
+
+    let originals = content
+        .lines()
+        .map(parse_line)
+        .enumerate()
+        .collect::<Vec<(usize, (Numbers, Numbers))>>();
+    let mut count = originals.len();
+    let mut stack = originals.clone();
+    while let Some((offset, (winning_numbers, numbers))) = stack.pop() {
+        let matches = count_matches(winning_numbers, numbers);
+        for i in 0..matches {
+            stack.push(originals[offset + 1 + i].clone());
+            count += 1;
+        }
+    }
+    println!("In total you end up with {count} scratchcards.");
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Numbers {
     numbers: Vec<usize>,
 }
@@ -47,4 +53,21 @@ impl FromStr for Numbers {
             .collect::<Vec<usize>>();
         Ok(Self { numbers })
     }
+}
+
+fn parse_line(l: &str) -> (Numbers, Numbers) {
+    let v = l.split(':').collect::<Vec<&str>>();
+    let v = v[1].split('|').collect::<Vec<&str>>();
+    (
+        v[0].parse::<Numbers>().unwrap(),
+        v[1].parse::<Numbers>().unwrap(),
+    )
+}
+
+fn count_matches(winning_numbers: Numbers, numbers: Numbers) -> usize {
+    numbers
+        .numbers
+        .iter()
+        .filter(|&&n| winning_numbers.numbers.iter().any(|&wn| wn == n))
+        .count()
 }
