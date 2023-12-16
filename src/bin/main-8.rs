@@ -68,11 +68,11 @@ impl From<&str> for Node {
 
 fn count_steps(network: &HashMap<Node, (Node, Node)>, instructions: &Vec<Direction>) -> usize {
     let mut count = 0;
-    let mut current_node = Node::from("AAA");
-    while current_node != Node::from("ZZZ") {
+    let mut current_node = &Node::from("AAA");
+    while *current_node != Node::from("ZZZ") {
         current_node = match instructions[count % instructions.len()] {
-            Direction::Left => network[&current_node].0.clone(),
-            Direction::Right => network[&current_node].1.clone(),
+            Direction::Left => &network[&current_node].0,
+            Direction::Right => &network[&current_node].1,
         };
         count += 1;
     }
@@ -84,8 +84,8 @@ fn count_ghost_steps(network: &HashMap<Node, (Node, Node)>, instructions: &[Dire
     // multiple
     let current_nodes = network
         .keys()
-        .cloned()
         .filter(|n| n.key.ends_with('A'))
+        .cloned()
         .collect::<Vec<Node>>();
     let periods = current_nodes
         .iter()
@@ -101,23 +101,23 @@ fn determine_period(
 ) -> usize {
     // count steps until encountering first node ending in Z
     let mut count = 0;
-    let mut current_node = starting_node.clone();
+    let mut current_node = starting_node;
     while !current_node.key.ends_with('Z') {
         current_node = match instructions[count % instructions.len()] {
-            Direction::Left => network[&current_node].0.clone(),
-            Direction::Right => network[&current_node].1.clone(),
+            Direction::Left => &network[&current_node].0,
+            Direction::Right => &network[&current_node].1,
         };
         count += 1;
     }
-    let end_node = current_node.clone();
+    let end_node = current_node;
     let period = count;
 
     // make sure that one ends up at the same node after `period` number of
     // steps
     for _ in 0..period {
         current_node = match instructions[count % instructions.len()] {
-            Direction::Left => network[&current_node].0.clone(),
-            Direction::Right => network[&current_node].1.clone(),
+            Direction::Left => &network[&current_node].0,
+            Direction::Right => &network[&current_node].1,
         };
         count += 1;
     }
@@ -128,8 +128,8 @@ fn determine_period(
 
 fn find_lcm(x: &[usize]) -> usize {
     let mut lcm = x[0];
-    for i in 1..x.len() {
-        lcm = compute_lcm(lcm, x[i]);
+    for item in x.iter().skip(1) {
+        lcm = compute_lcm(lcm, *item);
     }
     lcm
 }

@@ -16,7 +16,7 @@ fn main() {
         .collect::<Vec<Vec<usize>>>();
     let nways = possible_distances
         .into_iter()
-        .zip(record_distance.into_iter())
+        .zip(record_distance)
         .map(|(pd, rd)| pd.iter().filter(|&&d| d > rd).count())
         .collect::<Vec<usize>>();
     println!(
@@ -46,10 +46,7 @@ fn extract_numbers_after_colon(s: &str) -> Vec<usize> {
 }
 
 fn compute_distances(t: usize) -> Vec<usize> {
-    (0..t + 1)
-        .into_iter()
-        .map(|ti| (t - ti) * ti)
-        .collect::<Vec<usize>>()
+    (0..t + 1).map(|ti| (t - ti) * ti).collect::<Vec<usize>>()
 }
 
 fn extract_single_number_after_colon(s: &str) -> usize {
