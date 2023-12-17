@@ -48,7 +48,7 @@ fn parse_sketch(content: &str) -> Result<Vec<Vec<Tile>>, TileParseError> {
         .collect::<Result<Vec<Vec<Tile>>, TileParseError>>()
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum Tile {
     Vertical,
     Horizontal,
@@ -58,6 +58,41 @@ enum Tile {
     SE,
     Ground,
     Animal,
+}
+
+impl Tile {
+    fn is_connected_to(&self, other: &Self, relative_location: RelativeLocation) -> bool {
+        let connected_to_up = HashSet::from([Tile::Vertical, Tile::NW, Tile::NE]);
+        let connected_to_down = HashSet::from([Tile::Vertical, Tile::SW, Tile::SE]);
+        let connected_to_left = HashSet::from([Tile::Horizontal, Tile::NW, Tile::SW]);
+        let connected_to_right = HashSet::from([Tile::Horizontal, Tile::NE, Tile::SE]);
+
+        match relative_location {
+            RelativeLocation::Up => {
+                (*self == Tile::Animal || connected_to_up.contains(self))
+                    && connected_to_down.contains(other)
+            }
+            RelativeLocation::Down => {
+                (*self == Tile::Animal || connected_to_down.contains(self))
+                    && connected_to_up.contains(other)
+            }
+            RelativeLocation::Left => {
+                (*self == Tile::Animal || connected_to_left.contains(self))
+                    && connected_to_right.contains(other)
+            }
+            RelativeLocation::Right => {
+                (*self == Tile::Animal || connected_to_right.contains(self))
+                    && connected_to_left.contains(other)
+            }
+        }
+    }
+}
+
+enum RelativeLocation {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
 impl TryFrom<char> for Tile {
@@ -101,7 +136,7 @@ struct Position {
     y: usize,
 }
 
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 struct State {
     steps: usize,
     position: Position,
@@ -128,56 +163,53 @@ impl PartialEq for State {
 }
 
 fn get_neighbors(map: &Vec<Vec<Tile>>, position: Position) -> Vec<Position> {
-    let connected_to_up = HashSet::from([Tile::Vertical, Tile::NW, Tile::NE]);
-    let connected_to_down = HashSet::from([Tile::Vertical, Tile::SW, Tile::SE]);
-    let connected_to_left = HashSet::from([Tile::Horizontal, Tile::NW, Tile::SW]);
-    let connected_to_right = HashSet::from([Tile::Horizontal, Tile::NE, Tile::SE]);
     let mut neighbors = Vec::new();
 
     let current_tile = &map[position.y][position.x];
+
+    // move up
     if position.y > 0 {
         let next_tile = &map[position.y - 1][position.x];
-        if (*current_tile == Tile::Animal || connected_to_up.contains(current_tile))
-            && connected_to_down.contains(next_tile)
-        {
+        if current_tile.is_connected_to(next_tile, RelativeLocation::Up) {
             neighbors.push(Position {
                 y: position.y - 1,
                 x: position.x,
             });
         }
     }
+
+    // move down
     if position.y + 1 < map.len() {
         let next_tile = &map[position.y + 1][position.x];
-        if (*current_tile == Tile::Animal || connected_to_down.contains(current_tile))
-            && connected_to_up.contains(next_tile)
-        {
+        if current_tile.is_connected_to(next_tile, RelativeLocation::Down) {
             neighbors.push(Position {
                 y: position.y + 1,
                 x: position.x,
             });
         }
     }
+
+    // move left
     if position.x > 0 {
         let next_tile = &map[position.y][position.x - 1];
-        if (*current_tile == Tile::Animal || connected_to_left.contains(current_tile))
-            && connected_to_right.contains(next_tile)
-        {
+        if current_tile.is_connected_to(next_tile, RelativeLocation::Left) {
             neighbors.push(Position {
                 y: position.y,
                 x: position.x - 1,
             });
         }
     }
+
+    // move right
     if position.x + 1 < map.len() {
         let next_tile = &map[position.y][position.x + 1];
-        if (*current_tile == Tile::Animal || connected_to_right.contains(current_tile))
-            && connected_to_left.contains(next_tile)
-        {
+        if current_tile.is_connected_to(next_tile, RelativeLocation::Right) {
             neighbors.push(Position {
                 y: position.y,
                 x: position.x + 1,
             });
         }
     }
+
     neighbors
 }
