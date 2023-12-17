@@ -19,6 +19,15 @@ fn main() {
         .map(|h| *predict(h).last().unwrap())
         .sum::<i32>();
     println!("The sum of these extrapolated values is {sum}.");
+
+    let sum = histories
+        .iter()
+        .map(|h| {
+            let hrev = h.iter().rev().copied().collect::<Vec<i32>>();
+            *predict(&hrev).last().unwrap()
+        })
+        .sum::<i32>();
+    println!("The sum of these backward-extrapolated values is {sum}.");
 }
 
 fn predict(v: &[i32]) -> Vec<i32> {
