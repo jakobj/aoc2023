@@ -25,7 +25,7 @@ fn predict(v: &[i32]) -> Vec<i32> {
     let initial_state = v[0];
     let mut new = step(v);
     new.insert(0, initial_state);
-    new.cumsum(0)
+    new.cumsum()
 }
 
 fn step(v: &[i32]) -> Vec<i32> {
@@ -38,7 +38,7 @@ fn step(v: &[i32]) -> Vec<i32> {
         let initial_state = diff[0];
         let mut diff = step(&diff);
         diff.insert(0, initial_state);
-        diff.cumsum(0)
+        diff.cumsum()
     }
 }
 
@@ -55,13 +55,13 @@ impl Diff for Vec<i32> {
 }
 
 trait CumSum {
-    fn cumsum(&self, initial_state: i32) -> Vec<i32>;
+    fn cumsum(&self) -> Vec<i32>;
 }
 
 impl CumSum for Vec<i32> {
-    fn cumsum(&self, initial_state: i32) -> Vec<i32> {
+    fn cumsum(&self) -> Vec<i32> {
         self.iter()
-            .scan(initial_state, |acc, &x| {
+            .scan(0, |acc, &x| {
                 *acc += x;
                 Some(*acc)
             })
