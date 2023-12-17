@@ -23,7 +23,7 @@ fn main() {
 
 fn predict(v: &[i32]) -> Vec<i32> {
     let initial_state = v[0];
-    let mut new = step(&v);
+    let mut new = step(v);
     new.insert(0, initial_state);
     new.cumsum(0)
 }
@@ -33,13 +33,12 @@ fn step(v: &[i32]) -> Vec<i32> {
     if diff.iter().all(|&v| v == 0) {
         let mut diff = diff;
         diff.push(0);
-        return diff;
+        diff
     } else {
         let initial_state = diff[0];
         let mut diff = step(&diff);
         diff.insert(0, initial_state);
-        let v = diff.cumsum(0);
-        v
+        diff.cumsum(0)
     }
 }
 
