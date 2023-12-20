@@ -19,6 +19,7 @@ fn main() {
     let mut visited = HashSet::new();
     stack.push(State {
         steps: 0,
+        heuristic: 0,
         position: animal_position,
     });
     let mut max_steps = 0;
@@ -32,11 +33,43 @@ fn main() {
         for n in neighbors {
             stack.push(State {
                 steps: current_state.steps + 1,
+                heuristic: 0,
                 position: n,
             });
         }
     }
     println!("It takes {max_steps} steps along the loop to get from the starting position to the point farthest from the starting position.");
+
+    // idea: subdivide each tile into nice subtiles, interpret main-loop pipes
+    // as walls, do a shortest path search towards the sides of the map for each
+    // (nonloop) tile
+    let mut subtile_map = vec![vec![SubTile::Open; 3 * map[0].len()]; 3 * map.len()];
+    for position in visited.iter() {
+        let shape = map[position.y][position.x].get_subtile_shape();
+        for dy in 0..3 {
+            for dx in 0..3 {
+                subtile_map[3 * position.y + dy][3 * position.x + dx] = shape[dy][dx];
+            }
+        }
+    }
+
+    let mut enclosed_positions = HashSet::new();
+    for (i, row) in map.iter().enumerate() {
+        for (j, _) in row.iter().enumerate() {
+            let position = Position { y: i, x: j };
+            if visited.contains(&position) {
+                continue;
+            }
+            if !is_connected_to_boundary(&subtile_map, position, &enclosed_positions) {
+                enclosed_positions.insert(position);
+            }
+        }
+    }
+
+    println!(
+        "{} tiles are enclosed by the loop.",
+        enclosed_positions.len()
+    );
 }
 
 fn parse_sketch(content: &str) -> Result<Vec<Vec<Tile>>, TileParseError> {
@@ -84,6 +117,43 @@ impl Tile {
             RelativeLocation::Right => {
                 (connected_to_right.contains(self)) && connected_to_left.contains(other)
             }
+        }
+    }
+
+    fn get_subtile_shape(&self) -> [[SubTile; 3]; 3] {
+        match self {
+            Self::Vertical => [[SubTile::Open, SubTile::Closed, SubTile::Open]; 3],
+            Self::Horizontal => [
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+                [SubTile::Closed, SubTile::Closed, SubTile::Closed],
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+            ],
+            Self::NE => [
+                [SubTile::Open, SubTile::Closed, SubTile::Open],
+                [SubTile::Open, SubTile::Closed, SubTile::Closed],
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+            ],
+            Self::NW => [
+                [SubTile::Open, SubTile::Closed, SubTile::Open],
+                [SubTile::Closed, SubTile::Closed, SubTile::Open],
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+            ],
+            Self::SW => [
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+                [SubTile::Closed, SubTile::Closed, SubTile::Open],
+                [SubTile::Open, SubTile::Closed, SubTile::Open],
+            ],
+            Self::SE => [
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+                [SubTile::Open, SubTile::Closed, SubTile::Closed],
+                [SubTile::Open, SubTile::Closed, SubTile::Open],
+            ],
+            Self::Ground => [
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+                [SubTile::Open, SubTile::Open, SubTile::Open],
+            ],
+            Self::Animal => panic!(r"who knows? ¯\_(ツ)_/¯"),
         }
     }
 }
@@ -168,14 +238,15 @@ fn determine_animal_tile(map: &[Vec<Tile>], position: Position) -> Tile {
 #[derive(Debug, Eq)]
 struct State {
     steps: usize,
+    heuristic: usize,
     position: Position,
 }
 
 impl Ord for State {
     fn cmp(&self, other: &Self) -> Ordering {
-        // turn it into a min-heap
+        // turn it into a min-heap by switching order of `self` and `other`
         // (https://doc.rust-lang.org/std/collections/struct.BinaryHeap.html)
-        other.steps.cmp(&self.steps)
+        (other.steps + other.heuristic).cmp(&(self.steps + self.heuristic))
     }
 }
 
@@ -187,7 +258,7 @@ impl PartialOrd for State {
 
 impl PartialEq for State {
     fn eq(&self, other: &Self) -> bool {
-        self.steps == other.steps
+        self.steps == other.steps && self.heuristic == other.heuristic
     }
 }
 
@@ -240,5 +311,99 @@ fn get_neighbors(map: &[Vec<Tile>], position: Position) -> Vec<Position> {
         }
     }
 
+    neighbors
+}
+
+fn is_connected_to_boundary(
+    map: &Vec<Vec<SubTile>>,
+    position: Position,
+    enclosed_positions: &HashSet<Position>,
+) -> bool {
+    let mut stack = BinaryHeap::new();
+    let mut visited = HashSet::new();
+    stack.push(State {
+        steps: 0,
+        heuristic: compute_heuristic(map, position),
+        position: Position {
+            y: 3 * position.y,
+            x: 3 * position.x,
+        },
+    });
+    while let Some(current_state) = stack.pop() {
+        if visited.contains(&current_state.position) {
+            continue;
+        }
+        visited.insert(current_state.position);
+
+        if current_state.position.y == 0
+            || current_state.position.y + 1 == map.len()
+            || current_state.position.x == 0
+            || current_state.position.x + 1 == map[0].len()
+        {
+            return true;
+        }
+
+        // if we encounter an enclosed position, we know that there's NO WAY
+        // OUT!
+        if enclosed_positions.contains(&current_state.position) {
+            return false;
+        }
+
+        let neighbors = get_subtile_neighbors(map, current_state.position);
+        for position in neighbors {
+            stack.push(State {
+                steps: current_state.steps + 1,
+                heuristic: compute_heuristic(map, position),
+                position,
+            });
+        }
+    }
+    false
+}
+
+fn compute_heuristic(map: &Vec<Vec<SubTile>>, position: Position) -> usize {
+    [
+        position.y,
+        position.x,
+        map.len() - position.y,
+        map[0].len() - position.x,
+    ]
+    .into_iter()
+    .min()
+    .unwrap()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SubTile {
+    Open,
+    Closed,
+}
+
+fn get_subtile_neighbors(map: &[Vec<SubTile>], position: Position) -> Vec<Position> {
+    let mut neighbors = Vec::new();
+    if position.y > 0 && map[position.y - 1][position.x] != SubTile::Closed {
+        neighbors.push(Position {
+            y: position.y - 1,
+            x: position.x,
+        });
+    }
+    if position.y + 1 < map.len() && map[position.y + 1][position.x] != SubTile::Closed {
+        neighbors.push(Position {
+            y: position.y + 1,
+            x: position.x,
+        });
+    }
+    if position.x > 0 && map[position.y][position.x - 1] != SubTile::Closed {
+        neighbors.push(Position {
+            y: position.y,
+            x: position.x - 1,
+        });
+    }
+    if position.x + 1 < map[0].len() && map[position.y][position.x + 1] != SubTile::Closed {
+        neighbors.push(Position {
+            y: position.y,
+            x: position.x + 1,
+        });
+    }
     neighbors
 }
