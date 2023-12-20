@@ -9,10 +9,12 @@ fn main() {
     let content =
         fs::read_to_string(filename).expect("Should have been able to read the input file");
 
-    let map = parse_sketch(&content).expect("Should have been able to parse sketch");
+    let mut map = parse_sketch(&content).expect("Should have been able to parse sketch");
 
     // bfs from animal position without repeated visits
     let animal_position = find_animal(&map).expect("Could not find animal position");
+    let animal_tile = determine_animal_tile(&map, animal_position);
+    map[animal_position.y][animal_position.x] = animal_tile;
     let mut stack = BinaryHeap::new();
     let mut visited = HashSet::new();
     stack.push(State {
@@ -67,22 +69,20 @@ impl Tile {
         let connected_to_left = HashSet::from([Tile::Horizontal, Tile::NW, Tile::SW]);
         let connected_to_right = HashSet::from([Tile::Horizontal, Tile::NE, Tile::SE]);
 
+        assert!(*self != Tile::Animal);
+
         match relative_location {
             RelativeLocation::Up => {
-                (*self == Tile::Animal || connected_to_up.contains(self))
-                    && connected_to_down.contains(other)
+                (connected_to_up.contains(self)) && connected_to_down.contains(other)
             }
             RelativeLocation::Down => {
-                (*self == Tile::Animal || connected_to_down.contains(self))
-                    && connected_to_up.contains(other)
+                (connected_to_down.contains(self)) && connected_to_up.contains(other)
             }
             RelativeLocation::Left => {
-                (*self == Tile::Animal || connected_to_left.contains(self))
-                    && connected_to_right.contains(other)
+                (connected_to_left.contains(self)) && connected_to_right.contains(other)
             }
             RelativeLocation::Right => {
-                (*self == Tile::Animal || connected_to_right.contains(self))
-                    && connected_to_left.contains(other)
+                (connected_to_right.contains(self)) && connected_to_left.contains(other)
             }
         }
     }
@@ -136,6 +136,35 @@ struct Position {
     y: usize,
 }
 
+fn determine_animal_tile(map: &[Vec<Tile>], position: Position) -> Tile {
+    let connected_to_up = HashSet::from([Tile::Vertical, Tile::NW, Tile::NE]);
+    let connected_to_down = HashSet::from([Tile::Vertical, Tile::SW, Tile::SE]);
+    let connected_to_left = HashSet::from([Tile::Horizontal, Tile::NW, Tile::SW]);
+    let connected_to_right = HashSet::from([Tile::Horizontal, Tile::NE, Tile::SE]);
+
+    let up_tile = map[position.y - 1][position.x];
+    let down_tile = map[position.y + 1][position.x];
+    let left_tile = map[position.y][position.x - 1];
+    let right_tile = map[position.y][position.x + 1];
+
+    let xyz = [
+        connected_to_down.contains(&up_tile),
+        connected_to_left.contains(&right_tile),
+        connected_to_up.contains(&down_tile),
+        connected_to_right.contains(&left_tile),
+    ];
+
+    match xyz {
+        [true, true, false, false] => Tile::NE,
+        [true, false, true, false] => Tile::Vertical,
+        [true, false, false, true] => Tile::NW,
+        [false, true, true, false] => Tile::SE,
+        [false, true, false, true] => Tile::Horizontal,
+        [false, false, true, true] => Tile::SW,
+        _ => unreachable!(),
+    }
+}
+
 #[derive(Debug, Eq)]
 struct State {
     steps: usize,
@@ -162,7 +191,7 @@ impl PartialEq for State {
     }
 }
 
-fn get_neighbors(map: &Vec<Vec<Tile>>, position: Position) -> Vec<Position> {
+fn get_neighbors(map: &[Vec<Tile>], position: Position) -> Vec<Position> {
     let mut neighbors = Vec::new();
 
     let current_tile = &map[position.y][position.x];
