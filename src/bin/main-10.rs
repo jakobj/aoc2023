@@ -344,8 +344,13 @@ fn is_connected_to_boundary(
         }
 
         // if we encounter an enclosed position, we know that there's NO WAY
-        // OUT!
-        if enclosed_positions.contains(&current_state.position) {
+        // OUT! since `enclosed_positions` is not storing subtile positions, we
+        // first need to "coarse grain" again!
+        let tile_position = Position {
+            y: current_state.position.y / 3,
+            x: current_state.position.x / 3,
+        };
+        if enclosed_positions.contains(&tile_position) {
             return false;
         }
 
