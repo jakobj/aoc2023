@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs};
+use std::fs;
 
 fn main() {
     let filename = "inputs/11.txt";
@@ -11,21 +11,33 @@ fn main() {
         .collect::<Vec<Vec<Pixel>>>();
     let empty_rows = determine_empy_rows(&image);
     let empty_cols = determine_empy_cols(&image);
-    let expanded_image = expand_space(&image, &empty_rows, &empty_cols);
-    print_image(&image);
-    print_image(&expanded_image);
-    let galaxy_positions = find_galaxy_positions(&expanded_image);
+    let galaxy_positions = find_galaxy_positions(&image);
+
     let sum = galaxy_positions
         .iter()
-        .map(|&p0| {
+        .enumerate()
+        .map(|(i, &p0)| {
             galaxy_positions
                 .iter()
-                .map(|&p1| compute_distance(p0, p1))
+                .skip(i + 1)
+                .map(|&p1| compute_distance(p0, p1, &empty_rows, &empty_cols, 1))
                 .sum::<usize>()
         })
-        .sum::<usize>()
-        / 2;
+        .sum::<usize>();
     println!("The sum of these lengths is {sum}.");
+
+    let older_sum = galaxy_positions
+        .iter()
+        .enumerate()
+        .map(|(i, &p0)| {
+            galaxy_positions
+                .iter()
+                .skip(i + 1)
+                .map(|&p1| compute_distance(p0, p1, &empty_rows, &empty_cols, 1_000_000 - 1))
+                .sum::<usize>()
+        })
+        .sum::<usize>();
+    println!("The sum of these lengths for the older galaxies is {older_sum}.");
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,15 +52,6 @@ impl From<char> for Pixel {
             '#' => Pixel::Galaxy,
             '.' => Pixel::Empty,
             _ => panic!(),
-        }
-    }
-}
-
-impl Display for Pixel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Pixel::Galaxy => write!(f, "#"),
-            Pixel::Empty => write!(f, "."),
         }
     }
 }
@@ -75,32 +78,6 @@ fn determine_empy_cols(image: &[Vec<Pixel>]) -> Vec<usize> {
     empty_cols
 }
 
-fn expand_space(
-    image: &[Vec<Pixel>],
-    empty_rows: &[usize],
-    empty_cols: &[usize],
-) -> Vec<Vec<Pixel>> {
-    let mut expanded_image = image.to_vec();
-    for &j in empty_cols.iter().rev() {
-        for row in expanded_image.iter_mut() {
-            row.insert(j, Pixel::Empty);
-        }
-    }
-    for &i in empty_rows.iter().rev() {
-        expanded_image.insert(i, vec![Pixel::Empty; expanded_image[0].len()]);
-    }
-    expanded_image
-}
-
-fn print_image(image: &[Vec<Pixel>]) {
-    for row in image.iter() {
-        for p in row.iter() {
-            print!("{p}");
-        }
-        println!();
-    }
-}
-
 fn find_galaxy_positions(image: &[Vec<Pixel>]) -> Vec<Position> {
     let mut positions = Vec::new();
     for (i, row) in image.iter().enumerate() {
@@ -119,6 +96,26 @@ struct Position {
     x: usize,
 }
 
-fn compute_distance(p0: Position, p1: Position) -> usize {
-    ((p1.y as i32 - p0.y as i32).abs() + (p1.x as i32 - p0.x as i32).abs()) as usize
+fn compute_distance(
+    p0: Position,
+    p1: Position,
+    empty_rows: &[usize],
+    empty_cols: &[usize],
+    expand_by: usize,
+) -> usize {
+    let min_y = std::cmp::min(p0.y, p1.y);
+    let max_y = std::cmp::max(p0.y, p1.y);
+    let expanded_space_y = empty_rows
+        .iter()
+        .filter(|&&i| i > min_y && i < max_y)
+        .count();
+
+    let min_x = std::cmp::min(p0.x, p1.x);
+    let max_x = std::cmp::max(p0.x, p1.x);
+    let expanded_space_x = empty_cols
+        .iter()
+        .filter(|&&j| j > min_x && j < max_x)
+        .count();
+
+    (max_y - min_y) + (max_x - min_x) + expanded_space_y * expand_by + expanded_space_x * expand_by
 }
