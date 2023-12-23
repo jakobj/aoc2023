@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, fs, num::ParseIntError};
+use std::{error::Error, fmt, fs, iter, num::ParseIntError};
 
 fn main() {
     let filename = "inputs/12.txt";
@@ -35,6 +35,21 @@ fn main() {
         .map(|r| count_arrangements(&r.conditions, &r.summary))
         .sum::<usize>();
     println!("The sum of those counts is {n_arrangements}.");
+
+    let full_records = records.iter().map(unfold_record).collect::<Vec<Record>>();
+    let n_new_arrangements = full_records
+        .iter()
+        .enumerate()
+        .skip(1)
+        .take(1)
+        .map(|(i, r)| {
+            count_arrangements(&r.conditions, &r.summary)
+        })
+        //     .sum::<usize>();
+        // println!("The new sum of those counts is {n_new_arrangements}.");
+        .collect::<Vec<usize>>();
+    println!("{:?}", n_new_arrangements);
+    println!("{}", n_new_arrangements.iter().sum::<usize>());
 }
 
 fn to_string(conditions: &[Condition]) -> String {
@@ -92,14 +107,45 @@ struct Record {
 }
 
 fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
+    // prune branches via various strategies
+    // 1) we already have too many damaged springs
+    let n_damaged = count_damaged(&conditions);
+    if n_damaged > summary.iter().sum::<usize>() {
+        return 0;
+    }
+    // 2) we already have too many operational springs
+    if n_damaged + count_unknown(&conditions) < summary.iter().sum::<usize>() {
+        return 0;
+    }
+    let preliminary_summary = compute_preliminary_summary(conditions);
+    // 3) more damaged groups than target
+    if preliminary_summary.len() > summary.len() {
+        return 0;
+    }
+    // 4) damaged groups so far don't match the target
+    if preliminary_summary.len() > 0 {
+        if preliminary_summary[preliminary_summary.len() - 1]
+            > summary[preliminary_summary.len() - 1]
+        {
+            return 0;
+        }
+        for (actual_count, target_count) in preliminary_summary
+            .iter()
+            .take(preliminary_summary.len() - 1)
+            .zip(summary.iter())
+        {
+            if actual_count != target_count {
+                return 0;
+            }
+        }
+    }
+    // println!("{} {:?} {:?}", to_string(conditions), preliminary_summary, summary);
+
+    // if we reach here, we're still on the right track!
+
     // if there's nothing to replace, check validity
     if !conditions.iter().any(|&c| c == Condition::Unknown) {
-        let actual_summary = conditions
-            .split(|&c| c == Condition::Operational)
-            .map(|s| s.len())
-            .filter(|&n| n > 0)
-            .collect::<Vec<usize>>();
-        if actual_summary == summary {
+        if compute_summary(conditions) == summary {
             return 1;
         } else {
             return 0;
@@ -110,16 +156,63 @@ fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
     for (i, &c) in conditions.iter().enumerate() {
         if c == Condition::Unknown {
             let mut new_conditions = conditions.to_vec();
-            if count_damaged(&new_conditions) < summary.iter().sum::<usize>() {
-                new_conditions[i] = Condition::Damaged;
-                n_arrangements += count_arrangements(&new_conditions, summary);
-            }
-            if count_damaged(&conditions) + count_unknown(&conditions) > summary.iter().sum::<usize>() {
-                new_conditions[i] = Condition::Operational;
-                n_arrangements += count_arrangements(&new_conditions, summary);
-            }
+            new_conditions[i] = Condition::Damaged;
+            n_arrangements += count_arrangements(&new_conditions, summary);
+            new_conditions[i] = Condition::Operational;
+            n_arrangements += count_arrangements(&new_conditions, summary);
             break; // we break early, replacing `Unknown`s from left to right
         }
     }
     n_arrangements
+}
+
+fn unfold_record(record: &Record) -> Record {
+    Record {
+        conditions: iter::repeat(&record.conditions)
+            .take(5)
+            .map(|v| {
+                let mut v = v.to_vec();
+                v.insert(0, Condition::Unknown);
+                v
+            })
+            .flatten()
+            .skip(1) // we should only insert '?' *between* lists
+            .collect::<Vec<Condition>>(),
+        summary: iter::repeat(&record.summary)
+            .take(5)
+            .flatten()
+            .copied()
+            .collect::<Vec<usize>>(),
+    }
+}
+
+fn count_damaged(conditions: &[Condition]) -> usize {
+    conditions
+        .iter()
+        .filter(|&&c| c == Condition::Damaged)
+        .count()
+}
+
+fn count_unknown(conditions: &[Condition]) -> usize {
+    conditions
+        .iter()
+        .filter(|&&c| c == Condition::Unknown)
+        .count()
+}
+
+fn compute_summary(conditions: &[Condition]) -> Vec<usize> {
+    conditions
+        .split(|&c| c == Condition::Operational)
+        .map(|s| s.len())
+        .filter(|&n| n > 0)
+        .collect::<Vec<usize>>()
+}
+
+fn compute_preliminary_summary(conditions: &[Condition]) -> Vec<usize> {
+    let conditions = conditions
+        .iter()
+        .take_while(|&&c| c != Condition::Unknown)
+        .copied()
+        .collect::<Vec<Condition>>();
+    compute_summary(&conditions)
 }
