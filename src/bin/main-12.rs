@@ -94,14 +94,6 @@ struct Record {
 fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
     // if there's nothing to replace, check validity
     if !conditions.iter().any(|&c| c == Condition::Unknown) {
-        if conditions
-            .iter()
-            .filter(|&&c| c == Condition::Damaged)
-            .count()
-            != summary.iter().sum::<usize>()
-        {
-            return 0;
-        }
         let actual_summary = conditions
             .split(|&c| c == Condition::Operational)
             .map(|s| s.len())
@@ -118,10 +110,14 @@ fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
     for (i, &c) in conditions.iter().enumerate() {
         if c == Condition::Unknown {
             let mut new_conditions = conditions.to_vec();
-            new_conditions[i] = Condition::Damaged;
-            n_arrangements += count_arrangements(&new_conditions, summary);
-            new_conditions[i] = Condition::Operational;
-            n_arrangements += count_arrangements(&new_conditions, summary);
+            if count_damaged(&new_conditions) < summary.iter().sum::<usize>() {
+                new_conditions[i] = Condition::Damaged;
+                n_arrangements += count_arrangements(&new_conditions, summary);
+            }
+            if count_damaged(&conditions) + count_unknown(&conditions) > summary.iter().sum::<usize>() {
+                new_conditions[i] = Condition::Operational;
+                n_arrangements += count_arrangements(&new_conditions, summary);
+            }
             break; // we break early, replacing `Unknown`s from left to right
         }
     }
