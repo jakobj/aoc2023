@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, fs, iter, num::ParseIntError};
+use std::{collections::HashMap, error::Error, fmt, fs, iter, num::ParseIntError};
 
 fn main() {
     let filename = "inputs/12.txt";
@@ -32,49 +32,47 @@ fn main() {
 
     let n_arrangements = records
         .iter()
-        .map(|r| count_arrangements(&r.conditions, &r.summary))
+        .map(|r| {
+            let mut lut = HashMap::new();
+            count_arrangements(&r.conditions, &r.summary, &mut lut)
+        })
         .sum::<usize>();
     println!("The sum of those counts is {n_arrangements}.");
 
     let full_records = records.iter().map(unfold_record).collect::<Vec<Record>>();
     let n_new_arrangements = full_records
         .iter()
-        .enumerate()
-        .skip(1)
-        .take(1)
-        .map(|(i, r)| {
-            count_arrangements(&r.conditions, &r.summary)
+        .map(|r| {
+            let mut lut = HashMap::new();
+            count_arrangements(&r.conditions, &r.summary, &mut lut)
         })
-        //     .sum::<usize>();
-        // println!("The new sum of those counts is {n_new_arrangements}.");
-        .collect::<Vec<usize>>();
-    println!("{:?}", n_new_arrangements);
-    println!("{}", n_new_arrangements.iter().sum::<usize>());
+        .sum::<usize>();
+    println!("The new sum of those counts is {n_new_arrangements}.");
 }
 
-fn to_string(conditions: &[Condition]) -> String {
-    conditions
-        .iter()
-        .map(|c| format!("{}", c))
-        .collect::<String>()
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum Condition {
     Operational,
     Damaged,
     Unknown,
 }
 
-impl fmt::Display for Condition {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Condition::Operational => write!(f, "."),
-            Condition::Damaged => write!(f, "#"),
-            Condition::Unknown => write!(f, "?"),
-        }
-    }
-}
+// fn to_string(conditions: &[Condition]) -> String {
+//     conditions
+//         .iter()
+//         .map(|c| format!("{}", c))
+//         .collect::<String>()
+// }
+
+// impl fmt::Display for Condition {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             Condition::Operational => write!(f, "."),
+//             Condition::Damaged => write!(f, "#"),
+//             Condition::Unknown => write!(f, "?"),
+//         }
+//     }
+// }
 
 impl TryFrom<char> for Condition {
     type Error = ConditionParseError;
@@ -106,15 +104,19 @@ struct Record {
     summary: Vec<usize>,
 }
 
-fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
+fn count_arrangements(
+    conditions: &[Condition],
+    summary: &[usize],
+    lut: &mut HashMap<State, usize>,
+) -> usize {
     // prune branches via various strategies
     // 1) we already have too many damaged springs
-    let n_damaged = count_damaged(&conditions);
+    let n_damaged = count_damaged(conditions);
     if n_damaged > summary.iter().sum::<usize>() {
         return 0;
     }
     // 2) we already have too many operational springs
-    if n_damaged + count_unknown(&conditions) < summary.iter().sum::<usize>() {
+    if n_damaged + count_unknown(conditions) < summary.iter().sum::<usize>() {
         return 0;
     }
     let preliminary_summary = compute_preliminary_summary(conditions);
@@ -123,7 +125,7 @@ fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
         return 0;
     }
     // 4) damaged groups so far don't match the target
-    if preliminary_summary.len() > 0 {
+    if !preliminary_summary.is_empty() {
         if preliminary_summary[preliminary_summary.len() - 1]
             > summary[preliminary_summary.len() - 1]
         {
@@ -139,7 +141,6 @@ fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
             }
         }
     }
-    // println!("{} {:?} {:?}", to_string(conditions), preliminary_summary, summary);
 
     // if we reach here, we're still on the right track!
 
@@ -152,30 +153,47 @@ fn count_arrangements(conditions: &[Condition], summary: &[usize]) -> usize {
         }
     }
 
-    let mut n_arrangements = 0;
     for (i, &c) in conditions.iter().enumerate() {
         if c == Condition::Unknown {
+            let state = State {
+                idx: i,
+                preliminary_summary,
+                previous_condition: if i > 0 {
+                    conditions[i - 1]
+                } else {
+                    Condition::Unknown // doesn't really matter, but `Unknown`
+                                       // seems accurate ;)
+                },
+            };
+
+            // we know what's coming next
+            if lut.contains_key(&state) {
+                return lut[&state];
+            }
+
+            // if we don't know, we need to count
             let mut new_conditions = conditions.to_vec();
+            let mut n_arrangements = 0;
             new_conditions[i] = Condition::Damaged;
-            n_arrangements += count_arrangements(&new_conditions, summary);
+            n_arrangements += count_arrangements(&new_conditions, summary, lut);
             new_conditions[i] = Condition::Operational;
-            n_arrangements += count_arrangements(&new_conditions, summary);
-            break; // we break early, replacing `Unknown`s from left to right
+            n_arrangements += count_arrangements(&new_conditions, summary, lut);
+            lut.insert(state, n_arrangements);
+            return n_arrangements; // we break early, replacing `Unknown`s from left to right
         }
     }
-    n_arrangements
+    0
 }
 
 fn unfold_record(record: &Record) -> Record {
     Record {
         conditions: iter::repeat(&record.conditions)
             .take(5)
-            .map(|v| {
+            .flat_map(|v| {
                 let mut v = v.to_vec();
                 v.insert(0, Condition::Unknown);
                 v
             })
-            .flatten()
             .skip(1) // we should only insert '?' *between* lists
             .collect::<Vec<Condition>>(),
         summary: iter::repeat(&record.summary)
@@ -215,4 +233,11 @@ fn compute_preliminary_summary(conditions: &[Condition]) -> Vec<usize> {
         .copied()
         .collect::<Vec<Condition>>();
     compute_summary(&conditions)
+}
+
+#[derive(Debug, Eq, Hash, PartialEq)]
+struct State {
+    idx: usize,
+    preliminary_summary: Vec<usize>,
+    previous_condition: Condition,
 }
