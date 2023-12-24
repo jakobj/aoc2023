@@ -6,8 +6,37 @@ fn main() {
         fs::read_to_string(filename).expect("Should have been able to read the input file");
 
     let patterns = parse_patterns(&content).expect("Should have been able to parse patterns");
-    let summary = patterns.iter().map(find_reflection).sum::<usize>();
+    let inspections = patterns
+        .iter()
+        .map(inspect_pattern)
+        .collect::<Vec<Vec<(Option<usize>, Option<usize>, usize)>>>();
+    let summary = inspections
+        .iter()
+        .map(|v| {
+            // no missmatch allowed!
+            let (row, col, _) = v.iter().find(|(_, _, n)| *n == 0).unwrap();
+            if let Some(row) = row {
+                row * 100
+            } else {
+                col.unwrap()
+            }
+        })
+        .sum::<usize>();
     println!("You get {summary} after summarizing all of your notes.");
+
+    let unsmudged_summary = inspections
+        .iter()
+        .map(|v| {
+            // now we can fix exactly one missmatch
+            let (row, col, _) = v.iter().find(|(_, _, n)| *n == 1).unwrap();
+            if let Some(row) = row {
+                row * 100
+            } else {
+                col.unwrap()
+            }
+        })
+        .sum::<usize>();
+    println!("You get {unsmudged_summary} after summarizing the new reflection line in each pattern in your notes.");
 }
 
 fn parse_patterns(s: &str) -> Result<Vec<Pattern>, ParseGroundError> {
@@ -58,36 +87,40 @@ impl fmt::Display for ParseGroundError {
 
 impl Error for ParseGroundError {}
 
-fn find_reflection(p: &Pattern) -> usize {
+fn inspect_pattern(p: &Pattern) -> Vec<(Option<usize>, Option<usize>, usize)> {
+    let mut missmatches = Vec::new();
+
     // search rows
-    'rows: for (i, row) in p.0.iter().enumerate().take(p.0.len() - 1) {
+    for (i, row) in p.0.iter().enumerate().take(p.0.len() - 1) {
+        let mut n = 0;
         'offset: for offset in 0..(i + 1) {
             if i < offset || i + 1 + offset >= p.0.len() {
                 break 'offset;
             }
             for j in 0..row.len() {
                 if p.0[i - offset][j] != p.0[i + 1 + offset][j] {
-                    continue 'rows;
+                    n += 1;
                 }
             }
         }
-        return (i + 1) * 100;
+        missmatches.push((Some(i + 1), None, n));
     }
 
     // search cols
-    'cols: for j in 0..(p.0[0].len() - 1) {
+    for j in 0..(p.0[0].len() - 1) {
+        let mut n = 0;
         'offset: for offset in 0..(j + 1) {
             if j < offset || j + 1 + offset >= p.0[0].len() {
                 break 'offset;
             }
             for i in 0..p.0.len() {
                 if p.0[i][j - offset] != p.0[i][j + 1 + offset] {
-                    continue 'cols;
+                    n += 1;
                 }
             }
         }
-        return j + 1;
+        missmatches.push((None, Some(j + 1), n));
     }
 
-    panic!("No reflection found");
+    missmatches
 }
