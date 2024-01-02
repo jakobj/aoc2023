@@ -13,12 +13,20 @@ fn main() {
         .map(|l| l.chars().map(Block::from).collect::<Vec<Block>>())
         .collect::<Vec<Vec<Block>>>();
 
+    let min_loss = determine_min_loss(&grid, 0, 3);
+    println!("The least heat loss the crucible can incur is {min_loss}.");
+
+    let min_loss = determine_min_loss(&grid, 4, 10);
+    println!("The least heat loss the crucible can incur is {min_loss}.");
+}
+
+fn determine_min_loss(grid: &[Vec<Block>], n_min_straight: u8, n_max_straight: u8) -> u32 {
     let mut stack = BinaryHeap::new();
     stack.push(State {
         position: Position {
             y: 0,
             x: 0,
-            n: 0,
+            n_straight: 0,
             direction: Direction::Right,
         },
         loss: 0,
@@ -28,7 +36,7 @@ fn main() {
         position: Position {
             y: 0,
             x: 0,
-            n: 0,
+            n_straight: 0,
             direction: Direction::Down,
         },
         loss: 0,
@@ -36,33 +44,27 @@ fn main() {
     });
     let mut visited = HashSet::new();
     let mut min_loss = u32::MAX;
-    let mut min_trace = vec![];
+    // let mut min_trace = vec![];
     while let Some(state) = stack.pop() {
         if visited.contains(&state.position) {
             continue;
         }
         visited.insert(state.position);
 
+        // reached goal position
         if state.position.y + 1 == grid.len() as i32 && state.position.x + 1 == grid[0].len() as i32
         {
             min_loss = min_loss.min(state.loss);
-            min_trace = state.trace.clone();
+            // min_trace = state.trace.clone();
         }
 
-        // go straight
-        if state.position.n < 2 {
-            let (y, x) = match state.position.direction {
-                Direction::Up => (state.position.y - 1, state.position.x),
-                Direction::Down => (state.position.y + 1, state.position.x),
-                Direction::Left => (state.position.y, state.position.x - 1),
-                Direction::Right => (state.position.y, state.position.x + 1),
-            };
+        let mut maybe_push_state = |y, x, direction, n_straight| {
             if y >= 0 && y < grid.len() as i32 && x >= 0 && x < grid[0].len() as i32 {
                 let position = Position {
                     y,
                     x,
-                    n: state.position.n + 1,
-                    direction: state.position.direction,
+                    n_straight,
+                    direction,
                 };
                 let loss = state.loss + grid[y as usize][x as usize].0;
                 let mut trace = state.trace.clone();
@@ -73,60 +75,40 @@ fn main() {
                     trace,
                 });
             }
+        };
+
+        // go straight
+        if state.position.n_straight + 1 < n_max_straight {
+            let (y, x, direction) = match state.position.direction {
+                Direction::Up => (state.position.y - 1, state.position.x, Direction::Up),
+                Direction::Down => (state.position.y + 1, state.position.x, Direction::Down),
+                Direction::Left => (state.position.y, state.position.x - 1, Direction::Left),
+                Direction::Right => (state.position.y, state.position.x + 1, Direction::Right),
+            };
+            maybe_push_state(y, x, direction, state.position.n_straight + 1);
         }
 
-        // turn left
-        let (y, x, direction) = match state.position.direction {
-            Direction::Up => (state.position.y, state.position.x - 1, Direction::Left),
-            Direction::Down => (state.position.y, state.position.x + 1, Direction::Right),
-            Direction::Left => (state.position.y + 1, state.position.x, Direction::Down),
-            Direction::Right => (state.position.y - 1, state.position.x, Direction::Up),
-        };
-        if y >= 0 && y < grid.len() as i32 && x >= 0 && x < grid[0].len() as i32 {
-            let position = Position {
-                y,
-                x,
-                n: 0,
-                direction,
+        if state.position.n_straight + 1 >= n_min_straight {
+            // turn left
+            let (y, x, direction) = match state.position.direction {
+                Direction::Up => (state.position.y, state.position.x - 1, Direction::Left),
+                Direction::Down => (state.position.y, state.position.x + 1, Direction::Right),
+                Direction::Left => (state.position.y + 1, state.position.x, Direction::Down),
+                Direction::Right => (state.position.y - 1, state.position.x, Direction::Up),
             };
-            let loss = state.loss + grid[y as usize][x as usize].0;
-            let mut trace = state.trace.clone();
-            trace.push((y, x, position.direction));
-            stack.push(State {
-                position,
-                loss,
-                trace,
-            });
-        }
+            maybe_push_state(y, x, direction, 0);
 
-        // turn right
-        let (y, x, direction) = match state.position.direction {
-            Direction::Up => (state.position.y, state.position.x + 1, Direction::Right),
-            Direction::Down => (state.position.y, state.position.x - 1, Direction::Left),
-            Direction::Left => (state.position.y - 1, state.position.x, Direction::Up),
-            Direction::Right => (state.position.y + 1, state.position.x, Direction::Down),
-        };
-        if y >= 0 && y < grid.len() as i32 && x >= 0 && x < grid[0].len() as i32 {
-            let position = Position {
-                y,
-                x,
-                n: 0,
-                direction,
+            // turn right
+            let (y, x, direction) = match state.position.direction {
+                Direction::Up => (state.position.y, state.position.x + 1, Direction::Right),
+                Direction::Down => (state.position.y, state.position.x - 1, Direction::Left),
+                Direction::Left => (state.position.y - 1, state.position.x, Direction::Up),
+                Direction::Right => (state.position.y + 1, state.position.x, Direction::Down),
             };
-            let loss = state.loss + grid[y as usize][x as usize].0;
-            let mut trace = state.trace.clone();
-            trace.push((y, x, position.direction));
-            stack.push(State {
-                position,
-                loss,
-                trace,
-            });
+            maybe_push_state(y, x, direction, 0);
         }
     }
-    println!("The least heat loss the crucible can incur is {min_loss}.")
-    // println!("{}", min_loss);
-    // println!("{:?}", min_trace);
-    // print(&grid, &min_trace);
+    min_loss
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -168,7 +150,7 @@ impl PartialEq for State {
 struct Position {
     y: i32,
     x: i32,
-    n: u8,
+    n_straight: u8,
     direction: Direction,
 }
 
@@ -180,33 +162,33 @@ enum Direction {
     Right,
 }
 
-fn print(grid: &[Vec<Block>], trace: &[(i32, i32, Direction)]) {
-    println!();
-    let mut new_grid = vec![vec![".".to_string(); grid[0].len()]; grid.len()];
-    for (i, row) in grid.iter().enumerate() {
-        for (j, b) in row.iter().enumerate() {
-            new_grid[i][j] = format!("{}", b.0);
-        }
-    }
-    for pos in trace {
-        new_grid[pos.0 as usize][pos.1 as usize] = pos.2.into();
-    }
+// fn print(grid: &[Vec<Block>], trace: &[(i32, i32, Direction)]) {
+//     println!();
+//     let mut new_grid = vec![vec![".".to_string(); grid[0].len()]; grid.len()];
+//     for (i, row) in grid.iter().enumerate() {
+//         for (j, b) in row.iter().enumerate() {
+//             new_grid[i][j] = format!("{}", b.0);
+//         }
+//     }
+//     for pos in trace {
+//         new_grid[pos.0 as usize][pos.1 as usize] = pos.2.into();
+//     }
 
-    for row in new_grid.iter() {
-        for c in row.iter() {
-            print!("{c}");
-        }
-        println!();
-    }
-}
+//     for row in new_grid.iter() {
+//         for c in row.iter() {
+//             print!("{c}");
+//         }
+//         println!();
+//     }
+// }
 
-impl From<Direction> for String {
-    fn from(d: Direction) -> Self {
-        match d {
-            Direction::Up => "^".to_string(),
-            Direction::Down => "v".to_string(),
-            Direction::Left => "<".to_string(),
-            Direction::Right => ">".to_string(),
-        }
-    }
-}
+// impl From<Direction> for String {
+//     fn from(d: Direction) -> Self {
+//         match d {
+//             Direction::Up => "^".to_string(),
+//             Direction::Down => "v".to_string(),
+//             Direction::Left => "<".to_string(),
+//             Direction::Right => ">".to_string(),
+//         }
+//     }
+// }
