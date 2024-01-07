@@ -26,8 +26,8 @@ fn main() {
 
     let mut accepted_parts = Vec::new();
     for p in parts.iter() {
-        if apply_rules(p, "in", &workflows) {
-            accepted_parts.push(p.clone());
+        if apply_rules(*p, "in", &workflows) {
+            accepted_parts.push(p);
         }
     }
     let sum = accepted_parts
@@ -35,6 +35,15 @@ fn main() {
         .map(|p| p.ratings.iter().sum::<usize>())
         .sum::<usize>();
     println!("If you add together all of the rating numbers for all of the parts that ultimately get accepted, you get {sum}.");
+
+    let accepted_ranges = apply_rules_to_range(PartRange::new(), "in", &workflows);
+    let combinations = accepted_ranges
+        .iter()
+        .map(|pr| pr.ratings.iter().map(|r| r.1 - r.0 + 1).product::<usize>())
+        .sum::<usize>();
+    println!(
+        "{combinations} distinct combinations of ratings will be accepted by the Elves' workflows"
+    );
 }
 
 #[derive(Debug)]
@@ -103,7 +112,7 @@ impl Category {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Condition {
     Less,
     Greater,
@@ -120,23 +129,23 @@ impl From<&str> for Condition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct Part {
-    ratings: Vec<usize>,
+    ratings: [usize; 4],
 }
 
 impl From<&str> for Part {
     fn from(s: &str) -> Self {
-        let mut ratings = Vec::new();
-        for si in s.split(',') {
+        let mut ratings = [0; 4];
+        for (i, si) in s.split(',').enumerate() {
             let si = si.split('=').collect::<Vec<&str>>();
-            ratings.push(si[1].parse::<usize>().unwrap());
+            ratings[i] = si[1].parse::<usize>().unwrap();
         }
         Self { ratings }
     }
 }
 
-fn apply_rules(part: &Part, destination: &str, workflows: &HashMap<String, Vec<Rule>>) -> bool {
+fn apply_rules(part: Part, destination: &str, workflows: &HashMap<String, Vec<Rule>>) -> bool {
     if destination == "A" {
         return true;
     }
@@ -162,4 +171,54 @@ fn apply_rules(part: &Part, destination: &str, workflows: &HashMap<String, Vec<R
         }
     }
     unreachable!();
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PartRange {
+    ratings: [(usize, usize); 4],
+}
+
+impl PartRange {
+    fn new() -> Self {
+        PartRange {
+            ratings: [(1, 4000); 4],
+        }
+    }
+}
+
+fn apply_rules_to_range(
+    mut pr: PartRange,
+    destination: &str,
+    workflows: &HashMap<String, Vec<Rule>>,
+) -> Vec<PartRange> {
+    if destination == "A" {
+        return vec![pr];
+    }
+
+    if destination == "R" {
+        return vec![];
+    }
+
+    let mut result = Vec::new();
+    for r in workflows[destination].iter() {
+        match (r.condition, r.category, r.rating) {
+            (Some(Condition::Less), Some(category), Some(rating)) => {
+                let mut lr = pr;
+                lr.ratings[category.to_index()].1 = rating - 1;
+                result.append(&mut apply_rules_to_range(lr, &r.destination, workflows));
+                pr.ratings[category.to_index()].0 = rating;
+            }
+            (Some(Condition::Greater), Some(category), Some(rating)) => {
+                let mut ur = pr;
+                ur.ratings[category.to_index()].0 = rating + 1;
+                result.append(&mut apply_rules_to_range(ur, &r.destination, workflows));
+                pr.ratings[category.to_index()].1 = rating;
+            }
+            (None, None, None) => {
+                result.append(&mut apply_rules_to_range(pr, &r.destination, workflows))
+            }
+            _ => unreachable!(),
+        }
+    }
+    result
 }
