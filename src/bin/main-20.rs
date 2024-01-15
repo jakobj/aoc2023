@@ -28,21 +28,52 @@ fn main() {
     }
 
     for (name, inputs) in input_map.iter() {
-        if let Some(m) = modules.get_mut(name) {
-            m.set_inputs(inputs, Level::Low);
+        if let Some(module) = modules.get_mut(name) {
+            module.set_inputs(inputs, Level::Low);
         }
     }
 
     let mut n_events = (0, 0);
     for _ in 0..1000 {
-        let n = press_button(&mut modules);
+        let (n, _) = press_button(&mut modules, None);
         n_events.0 += n.0;
         n_events.1 += n.1;
     }
     println!("If you multiply the total number of low pulses sent by the total number of high pulses sent you get {}.", n_events.0 * n_events.1);
+
+    // idea: look at module graph, determine which (non-recurrent) nodes need
+    // transitions, then figure out periods of those, then find least common
+    // multiple of periods
+    let periods = [
+        ("kk", Level::Low),
+        ("sk", Level::Low),
+        ("xc", Level::Low),
+        ("vt", Level::Low),
+    ]
+    .into_iter()
+    .map(|break_on| {
+        for module in modules.values_mut() {
+            module.reset();
+        }
+        let mut n_button_presses: usize = 0;
+        loop {
+            let (_, done) = press_button(&mut modules, Some(break_on));
+            n_button_presses += 1;
+            if done {
+                break;
+            }
+        }
+        n_button_presses
+    })
+    .collect::<Vec<usize>>();
+    let n_button_presses = find_lcm(&periods);
+    println!("The fewest number of button presses required to deliver a single low pulse to the module named rx is {n_button_presses}.");
 }
 
-fn press_button(modules: &mut HashMap<String, Module>) -> (usize, usize) {
+fn press_button(
+    modules: &mut HashMap<String, Module>,
+    break_on: Option<(&str, Level)>,
+) -> ((usize, usize), bool) {
     let mut event_queue = VecDeque::new();
     event_queue.push_back(Event {
         source: String::from("button"),
@@ -51,16 +82,22 @@ fn press_button(modules: &mut HashMap<String, Module>) -> (usize, usize) {
     });
     let mut n_events = (0, 0);
     while let Some(event) = event_queue.pop_front() {
+        // println!("  {event:?}");
         if event.level == Level::Low {
             n_events.0 += 1;
         } else {
             n_events.1 += 1;
         }
-        if let Some(m) = modules.get_mut(&event.destination) {
-            m.process_event(event, &mut event_queue);
+        if let Some((name, level)) = break_on {
+            if event.destination == name && event.level == level {
+                return (n_events, true);
+            }
+        }
+        if let Some(module) = modules.get_mut(&event.destination) {
+            module.process_event(event, &mut event_queue);
         }
     }
-    n_events
+    (n_events, false)
 }
 
 #[derive(Clone, Debug)]
@@ -82,9 +119,9 @@ impl Module {
                     None
                 }
             }
-            ModuleType::Conjunction(ref mut levels) => {
-                *levels.get_mut(&event.source).unwrap() = event.level;
-                if levels.values().all(|&l| l == Level::High) {
+            ModuleType::Conjunction(ref mut input_levels) => {
+                *input_levels.get_mut(&event.source).unwrap() = event.level;
+                if input_levels.values().all(|&l| l == Level::High) {
                     Some(Level::Low)
                 } else {
                     Some(Level::High)
@@ -106,6 +143,16 @@ impl Module {
         if let ModuleType::Conjunction(ref mut levels) = &mut self.module_type {
             for input in inputs.iter() {
                 levels.insert(input.to_string(), level);
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        match self.module_type {
+            ModuleType::Broadcaster => (),
+            ModuleType::FlipFlop(ref mut level) => *level = Level::Low,
+            ModuleType::Conjunction(ref mut input_levels) => {
+                input_levels.values_mut().map(|l| *l = Level::Low).count();
             }
         }
     }
@@ -163,4 +210,26 @@ impl Not for Level {
             Self::High => Self::Low,
         }
     }
+}
+
+fn find_lcm(x: &[usize]) -> usize {
+    let mut lcm = x[0];
+    for item in x.iter().skip(1) {
+        lcm = compute_lcm(lcm, *item);
+    }
+    lcm
+}
+
+fn compute_lcm(a: usize, b: usize) -> usize {
+    let gcd = compute_gcd(a, b);
+    a * (b / gcd)
+}
+
+fn compute_gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
 }
